@@ -1,10 +1,12 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
+	"os/signal"
 	"time"
 
 	uuid "github.com/satori/go.uuid"
@@ -19,7 +21,9 @@ func main() {
 	timeAPIurl := os.Getenv("TIME_API")
 	tc := newTimeClient(timeAPIurl)
 
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	router := http.NewServeMux()
+
+	router.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		t, err := tc.getTime()
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -31,7 +35,27 @@ func main() {
 			fmt.Fprintf(w, "\nRunning on %s", envName)
 		}
 	})
-	http.ListenAndServe(":"+port, nil)
+
+	server := &http.Server{
+		Addr:    "localhost:" + port,
+		Handler: router,
+	}
+
+	done := make(chan bool, 1)
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, os.Interrupt)
+
+	go func() {
+		<-quit
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		server.Shutdown(ctx)
+		close(done)
+	}()
+
+	server.ListenAndServe()
+	<-done
 }
 
 type timeResponse struct {
