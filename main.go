@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -41,21 +42,29 @@ func main() {
 		Handler: router,
 	}
 
+	// handle SIGTERM
 	done := make(chan bool, 1)
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, os.Interrupt)
 
 	go func() {
 		<-quit
+		log.Println("Server is shutting down...")
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
-		server.Shutdown(ctx)
+		if err := server.Shutdown(ctx); err != nil {
+			log.Fatalf("Could not gracefully shutdown the server: %v\n", err)
+		}
 		close(done)
 	}()
 
-	server.ListenAndServe()
+	log.Println("Server is ready to handle requests at", port)
+	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		log.Fatalf("Could not listen on %s: %v\n", port, err)
+	}
 	<-done
+	log.Println("Server stopped")
 }
 
 type timeResponse struct {
