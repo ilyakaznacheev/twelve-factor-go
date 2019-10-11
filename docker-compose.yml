@@ -1,0 +1,8 @@
+version: '3'
+
+services:
+  twelve-factor:
+    build: 
+      context: .
+    ports:
+      - "8080:8080"
